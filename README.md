@@ -125,7 +125,9 @@ BullMQ worker is run **in-process** inside the API web service via
 `render.yaml` sets `RUN_WORKER=true` so the API process also processes the
 queue. Locally you instead run the dedicated worker (`backend/dist/worker.js`)
 and leave `RUN_WORKER` unset — `jobId=email.id` idempotency keeps it safe
-either way. The public URL is the web service's `https://<name>.onrender.com`.
+either way. On Render, `FRONTEND_URL`, `GOOGLE_CALLBACK_URL`, and
+`SLACK_REDIRECT_URI` are derived automatically from `RENDER_EXTERNAL_URL`;
+register the resulting URLs from the service dashboard in Google/Slack.
 
 ---
 

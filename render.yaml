@@ -34,13 +34,6 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      # <FILL> set to this API service's public URL once deployed
-      - key: FRONTEND_URL
-        value: https://reachinbox-api.onrender.com
-      - key: GOOGLE_CALLBACK_URL
-        value: https://reachinbox-api.onrender.com/api/auth/google/callback
-      - key: SLACK_REDIRECT_URI
-        value: https://reachinbox-api.onrender.com/api/auth/slack/callback
       - key: JWT_SECRET
         sync: false
       - key: DEV_LOGIN_ENABLED

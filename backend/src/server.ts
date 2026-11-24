@@ -53,7 +53,7 @@ createBullBoard({
 });
 app.use('/admin/queues', boardAdapter.getRouter());
 
-const frontendDist = path.resolve(process.cwd(), '..', 'frontend', 'dist');
+const frontendDist = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
 if (env.NODE_ENV === 'production') {
   app.use(express.static(frontendDist));
   app.get('*', (_req, res) => res.sendFile(path.join(frontendDist, 'index.html')));

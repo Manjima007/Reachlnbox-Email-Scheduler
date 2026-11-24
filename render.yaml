@@ -15,13 +15,10 @@ services:
     name: reachinbox-api
     runtime: node
     plan: free
-    rootDir: backend
     buildCommand: >
       npm ci &&
-      cd backend &&
-      npx prisma generate &&
-      npx prisma migrate deploy &&
-      npm run build
+      npm run build &&
+      cd backend && npx prisma generate && npx prisma migrate deploy
     startCommand: node backend/dist/server.js
     autoDeploy: true
     envVars:

@@ -106,6 +106,24 @@ Default config ships with `ELASTICSEARCH_ENABLED=false` so the app works with ju
 
 ---
 
+## 3b. Deploy to Render (single-service, free tier)
+
+Free Render accounts cannot create **background-worker** services, so the
+BullMQ worker is run **in-process** inside the API web service via
+`RUN_WORKER=true`. One web service = the whole app.
+
+1. **New → PostgreSQL** (free) → copy the `postgres://` connection string
+2. **New → Key Value** (free) → copy the `redis://` connection URL
+3. **New → Blueprint** → pick this repo → fill `DATABASE_URL` + `REDIS_URL`
+   (and your OAuth/Slack/SMTP secrets) → **Deploy**
+
+`render.yaml` sets `RUN_WORKER=true` so the API process also processes the
+queue. Locally you instead run the dedicated worker (`backend/dist/worker.js`)
+and leave `RUN_WORKER` unset — `jobId=email.id` idempotency keeps it safe
+either way. The public URL is the web service's `https://<name>.onrender.com`.
+
+---
+
 ## 4. Features → where they live
 
 | Feature | File |

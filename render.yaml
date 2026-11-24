@@ -1,18 +1,19 @@
 # Render Blueprint — deploys the ReachInbox API + background worker.
 #
-# USAGE (simplest, most reliable):
-#   1. Render -> New -> PostgreSQL   -> create `reachinbox-db`, note its Connection String (psql://...)
-#   2. Render -> New -> Key Value    -> create `reachinbox-redis`, note its redis:// connection URL
-#   3. Render -> New -> Blueprint     -> pick this repo -> it creates the API + worker below
-#   4. In the deploy screen, paste the two connection strings into DATABASE_URL / REDIS_URL
+# USAGE:
+#   1. Render -> New -> PostgreSQL  -> create `reachinbox-db`, copy its psql:// connection string
+#   2. Render -> New -> Key Value   -> create `reachinbox-redis`, copy its redis:// connection URL
+#   3. Render -> New -> Blueprint   -> pick this repo -> creates the API + worker
+#   4. When prompted, paste DATABASE_URL + REDIS_URL (+ your OAuth/Slack/SMTP secrets)
 #
-# This file intentionally avoids cross-resource references (which Render can't
-# validate at import time) so the Blueprint imports cleanly every time.
+# NOTE: DATABASE_URL / REDIS_URL are marked sync:false so Render prompts for them
+# at deploy time (cross-resource auto-wiring can't be validated at import time).
 
 services:
   # --- API (Express) — also serves the built frontend in production ---
   - type: web
     name: reachinbox-api
+    runtime: node
     plan: free
     rootDir: backend
     buildCommand: >
@@ -25,10 +26,10 @@ services:
     envVars:
       # <FILL> paste your Render PostgreSQL connection string
       - key: DATABASE_URL
-        sync: true
+        sync: false
       # <FILL> paste your Render Key Value (Redis) connection URL
       - key: REDIS_URL
-        sync: true
+        sync: false
       - key: NODE_ENV
         value: production
       # <FILL> set to this API service's public URL once deployed
@@ -48,6 +49,7 @@ services:
   # --- BullMQ worker (background; persistent jobs + rate-limit alerts) ---
   - type: worker
     name: reachinbox-worker
+    runtime: node
     plan: free
     rootDir: backend
     buildCommand: >
@@ -58,9 +60,9 @@ services:
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
-        sync: true
+        sync: false
       - key: REDIS_URL
-        sync: true
+        sync: false
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET

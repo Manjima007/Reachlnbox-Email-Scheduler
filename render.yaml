@@ -1,16 +1,16 @@
-# Render Blueprint — deploys the ReachInbox API + background worker.
+# Render Blueprint — deploys the ReachInbox API (which also runs the BullMQ
+# worker in-process, since free Render has no background-worker service type).
 #
 # USAGE:
-#   1. Render -> New -> PostgreSQL  -> create `reachinbox-db`, copy its psql:// connection string
-#   2. Render -> New -> Key Value   -> create `reachinbox-redis`, copy its redis:// connection URL
-#   3. Render -> New -> Blueprint   -> pick this repo -> creates the API + worker
-#   4. When prompted, paste DATABASE_URL + REDIS_URL (+ your OAuth/Slack/SMTP secrets)
+#   1. Render -> New -> PostgreSQL  -> create a db, copy its psql:// connection string
+#   2. Render -> New -> Key Value   -> create a Redis, copy its redis:// connection URL
+#   3. Render -> New -> Blueprint   -> pick this repo -> it creates the API service
+#   4. Paste the two connection strings into DATABASE_URL / REDIS_URL, then Deploy
 #
-# NOTE: DATABASE_URL / REDIS_URL are marked sync:false so Render prompts for them
-# at deploy time (cross-resource auto-wiring can't be validated at import time).
+# The API process starts the BullMQ worker in-process (RUN_WORKER=true), so a
+# single web service is enough for the whole app on a free account.
 
 services:
-  # --- API (Express) — also serves the built frontend in production ---
   - type: web
     name: reachinbox-api
     runtime: node
@@ -18,10 +18,11 @@ services:
     rootDir: backend
     buildCommand: >
       npm ci &&
+      cd backend &&
       npx prisma generate &&
       npx prisma migrate deploy &&
       npm run build
-    startCommand: node dist/server.js
+    startCommand: node backend/dist/server.js
     autoDeploy: true
     envVars:
       # <FILL> paste your Render PostgreSQL connection string
@@ -45,25 +46,6 @@ services:
         value: "true"
       - key: ELASTICSEARCH_ENABLED
         value: "false"
-
-  # --- BullMQ worker (background; persistent jobs + rate-limit alerts) ---
-  - type: worker
-    name: reachinbox-worker
-    runtime: node
-    plan: free
-    rootDir: backend
-    buildCommand: >
-      npm ci &&
-      npx prisma generate &&
-      npm run build
-    startCommand: node dist/worker.js
-    autoDeploy: true
-    envVars:
-      - key: DATABASE_URL
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: NODE_ENV
-        value: production
-      - key: JWT_SECRET
-        value: dev-only-secret-change-me
+      # Run the BullMQ worker inside the API process (single-service deploy).
+      - key: RUN_WORKER
+        value: "true"

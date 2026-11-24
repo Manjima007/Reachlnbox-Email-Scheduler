@@ -73,6 +73,7 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
 
 const server = app.listen(env.PORT, () => {
   console.log(`[api] listening on http://localhost:${env.PORT}`);
+  console.log(`[api] public URL: ${env.FRONTEND_URL}`);
   console.log(`[api] bull dashboard: http://localhost:${env.PORT}/admin/queues`);
 
   // Single-service deploy mode (free Render has no background-worker service

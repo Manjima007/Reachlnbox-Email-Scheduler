@@ -42,10 +42,10 @@ export async function validateSlackBotToken(
   };
 }
 
-export function slackConnectUrl(state: string): string {
+export function slackConnectUrl(state: string, redirectUri = env.SLACK_REDIRECT_URI): string {
   const params = new URLSearchParams({
     client_id: env.SLACK_CLIENT_ID ?? '',
-    redirect_uri: env.SLACK_REDIRECT_URI,
+    redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'chat:write,chat:write.public,channels:read,groups:read',
     state,
@@ -60,7 +60,7 @@ export function slackConnectUrl(state: string): string {
   return `${SLACK_AUTH_URL}?${params.toString()}`;
 }
 
-export async function exchangeSlackCode(code: string): Promise<{
+export async function exchangeSlackCode(code: string, redirectUri = env.SLACK_REDIRECT_URI): Promise<{
   accessToken: string;
   teamId: string | null;
   userId: string | null;
@@ -77,7 +77,7 @@ export async function exchangeSlackCode(code: string): Promise<{
       code,
       client_id: env.SLACK_CLIENT_ID!,
       client_secret: env.SLACK_CLIENT_SECRET!,
-      redirect_uri: env.SLACK_REDIRECT_URI,
+      redirect_uri: redirectUri,
     }),
   });
   const payload = (await response.json()) as {
@@ -95,7 +95,8 @@ export async function exchangeSlackCode(code: string): Promise<{
     const hint =
       payload.error === 'invalid_auth'
         ? ' — most often a redirect_uri mismatch. Confirm your Slack app\'s "Redirect URLs" include: ' +
-          env.SLACK_REDIRECT_URI
+           redirectUri
+
         : payload.error === 'invalid_client_id'
           ? ' — the client_id (SLACK_CLIENT_ID) does not exist. Regenerate it in your app.'
           : '';

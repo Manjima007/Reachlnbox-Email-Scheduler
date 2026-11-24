@@ -7,16 +7,16 @@
 
 services:
   # --- Postgres (relational DB) ---
-  - type: postgres
+  - type: psql
     name: reachinbox-db
     plan: free
-    # Render injects DATABASE_URL into the services that declare `dependencies`.
+    databaseName: reachinbox
+    user: reachinbox
 
   # --- Redis (BullMQ queue + rate-limit counters) ---
-  - type: redis
+  - type: keyValue
     name: reachinbox-redis
     plan: free
-    ipAllowList: []          # keep open for the worker; Render injects REDIS_URL
 
   # --- API (Express) — also serves the built frontend in production ---
   - type: web

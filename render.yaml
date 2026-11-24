@@ -17,13 +17,10 @@ services:
     plan: free
     buildCommand: >
       npm ci &&
-      npm install --prefix backend --no-save --no-audit --no-fund @types/node @types/nodemailer typescript &&
-      cd backend &&
-      npx prisma generate &&
-      npx prisma migrate deploy &&
+      npm run build --workspace frontend &&
+      cd backend && npx prisma generate && npx prisma migrate deploy &&
       npx tsc -p tsconfig.json &&
-      cd ../frontend &&
-      npx vite build
+      cd ../frontend && rm -rf dist && npx vite build
     startCommand: node backend/dist/server.js
     autoDeploy: true
     envVars:

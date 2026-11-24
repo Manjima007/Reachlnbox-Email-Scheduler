@@ -20,7 +20,7 @@ services:
       cd backend && npx prisma generate && npx prisma migrate deploy &&
       npx esbuild src/server.ts --bundle --format=cjs --platform=node --packages=external --sourcemap --outfile=dist/server.js &&
       npx esbuild src/worker.ts --bundle --format=cjs --platform=node --packages=external --sourcemap --outfile=dist/worker.js &&
-      cd ../frontend && rm -rf node_modules/.vite node_modules/.vite-temp && npm run build
+      cd ../frontend && node ../node_modules/vite/bin/vite.js build
     startCommand: node backend/dist/server.js
     autoDeploy: true
     envVars:

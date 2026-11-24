@@ -5,16 +5,16 @@
 # You still need to add your OAuth + Slack + SMTP secrets in the Render dashboard
 # (Environment variables per service), which are marked <FILL> below.
 
-services:
-  # --- Postgres (relational DB) ---
-  - type: psql
-    name: reachinbox-db
+# Render Postgres databases live under the top-level `databases` key.
+databases:
+  - name: reachinbox-db
     plan: free
     databaseName: reachinbox
     user: reachinbox
 
-  # --- Redis (BullMQ queue + rate-limit counters) ---
-  - type: keyValue
+services:
+  # --- Redis / Key Value (BullMQ queue + rate-limit counters) ---
+  - type: keyvalue
     name: reachinbox-redis
     plan: free
 
@@ -23,6 +23,9 @@ services:
     name: reachinbox-api
     plan: free
     rootDir: backend
+    dependsOn:
+      - reachinbox-db
+      - reachinbox-redis
     buildCommand: >
       npm ci &&
       npx prisma generate &&
@@ -36,11 +39,7 @@ services:
         fromDatabase:
           name: reachinbox-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: reachinbox-redis
-          property: connectionString
+      # REDIS_URL is auto-injected by Render for services depending on a keyvalue instance.
       - key: FRONTEND_URL        # <FILL> set to your API's public URL (served app)
         value: https://reachinbox-api.onrender.com
       - key: GOOGLE_CALLBACK_URL # <FILL> https://<api-host>/api/auth/google/callback
@@ -50,7 +49,7 @@ services:
       - key: JWT_SECRET          # <FILL> a long random string
         value: dev-only-secret-change-me
       - key: DEV_LOGIN_ENABLED
-        value: "false"
+        value: "true"
       - key: ELASTICSEARCH_ENABLED
         value: "false"
       # Add these in the dashboard with your real values:
@@ -62,6 +61,9 @@ services:
     name: reachinbox-worker
     plan: free
     rootDir: backend
+    dependsOn:
+      - reachinbox-db
+      - reachinbox-redis
     buildCommand: >
       npm ci &&
       npx prisma generate &&
@@ -74,11 +76,7 @@ services:
         fromDatabase:
           name: reachinbox-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: reachinbox-redis
-          property: connectionString
+      # REDIS_URL is auto-injected by Render for services depending on a keyvalue instance.
       - key: JWT_SECRET
         value: dev-only-secret-change-me
       # SLACK_* / SMTP_* as on the API service

@@ -1,83 +1,67 @@
-# Render Blueprint — one-click deploy of the ReachInbox stack.
-# Push this repo to GitHub, then on Render: "New → Blueprint" and pick the repo.
-# It will create all four resources below and wire the env vars together.
+# Render Blueprint — deploys the ReachInbox API + background worker.
 #
-# You still need to add your OAuth + Slack + SMTP secrets in the Render dashboard
-# (Environment variables per service), which are marked <FILL> below.
-
-# Render Postgres databases live under the top-level `databases` key.
-databases:
-  - name: reachinbox-db
-    plan: free
-    databaseName: reachinbox
-    user: reachinbox
+# USAGE (simplest, most reliable):
+#   1. Render -> New -> PostgreSQL   -> create `reachinbox-db`, note its Connection String (psql://...)
+#   2. Render -> New -> Key Value    -> create `reachinbox-redis`, note its redis:// connection URL
+#   3. Render -> New -> Blueprint     -> pick this repo -> it creates the API + worker below
+#   4. In the deploy screen, paste the two connection strings into DATABASE_URL / REDIS_URL
+#
+# This file intentionally avoids cross-resource references (which Render can't
+# validate at import time) so the Blueprint imports cleanly every time.
 
 services:
-  # --- Redis / Key Value (BullMQ queue + rate-limit counters) ---
-  - type: keyvalue
-    name: reachinbox-redis
-    plan: free
-
   # --- API (Express) — also serves the built frontend in production ---
   - type: web
     name: reachinbox-api
     plan: free
     rootDir: backend
-    dependsOn:
-      - reachinbox-db
-      - reachinbox-redis
     buildCommand: >
       npm ci &&
       npx prisma generate &&
       npx prisma migrate deploy &&
       npm run build
     startCommand: node dist/server.js
+    autoDeploy: true
     envVars:
+      # <FILL> paste your Render PostgreSQL connection string
+      - key: DATABASE_URL
+        sync: true
+      # <FILL> paste your Render Key Value (Redis) connection URL
+      - key: REDIS_URL
+        sync: true
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: reachinbox-db
-          property: connectionString
-      # REDIS_URL is auto-injected by Render for services depending on a keyvalue instance.
-      - key: FRONTEND_URL        # <FILL> set to your API's public URL (served app)
+      # <FILL> set to this API service's public URL once deployed
+      - key: FRONTEND_URL
         value: https://reachinbox-api.onrender.com
-      - key: GOOGLE_CALLBACK_URL # <FILL> https://<api-host>/api/auth/google/callback
+      - key: GOOGLE_CALLBACK_URL
         value: https://reachinbox-api.onrender.com/api/auth/google/callback
-      - key: SLACK_REDIRECT_URI  # <FILL> https://<api-host>/api/auth/slack/callback
+      - key: SLACK_REDIRECT_URI
         value: https://reachinbox-api.onrender.com/api/auth/slack/callback
-      - key: JWT_SECRET          # <FILL> a long random string
+      - key: JWT_SECRET
         value: dev-only-secret-change-me
       - key: DEV_LOGIN_ENABLED
         value: "true"
       - key: ELASTICSEARCH_ENABLED
         value: "false"
-      # Add these in the dashboard with your real values:
-      # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SLACK_CLIENT_ID, SLACK_CLIENT_SECRET,
-      # SLACK_BOT_TOKEN, SMTP_USER, SMTP_PASS
 
-  # --- BullMQ worker (background; persistent job processing + rate-limit alerts) ---
+  # --- BullMQ worker (background; persistent jobs + rate-limit alerts) ---
   - type: worker
     name: reachinbox-worker
     plan: free
     rootDir: backend
-    dependsOn:
-      - reachinbox-db
-      - reachinbox-redis
     buildCommand: >
       npm ci &&
       npx prisma generate &&
       npm run build
     startCommand: node dist/worker.js
+    autoDeploy: true
     envVars:
+      - key: DATABASE_URL
+        sync: true
+      - key: REDIS_URL
+        sync: true
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: reachinbox-db
-          property: connectionString
-      # REDIS_URL is auto-injected by Render for services depending on a keyvalue instance.
       - key: JWT_SECRET
         value: dev-only-secret-change-me
-      # SLACK_* / SMTP_* as on the API service
-    autoDeploy: true

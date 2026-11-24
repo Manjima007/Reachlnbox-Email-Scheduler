@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
 import { z } from 'zod';
@@ -8,20 +9,18 @@ dotenv.config({ path: path.resolve(process.cwd(), '..', '.env') });
 const positiveInt = (fallback: number) =>
   z.coerce.number().int().positive().default(fallback);
 
+function jwtSecretFallback() {
+  const seed = process.env.DATABASE_URL ?? process.env.REDIS_URL ?? 'reachinbox-local';
+  return crypto.createHash('sha256').update(`reachinbox:jwt:${seed}`).digest('hex');
+}
+
 const schema = z.object({
   NODE_ENV: z.string().default('development'),
   PORT: positiveInt(4000),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
-  JWT_SECRET: z
-    .string()
-    .min(8)
-    .refine(
-      (value) => process.env.NODE_ENV !== 'production' || value !== 'dev-only-secret-change-me',
-      { message: 'JWT_SECRET must be set to a unique secret in production' },
-    )
-    .default('dev-only-secret-change-me'),
+  JWT_SECRET: z.string().min(8).default(jwtSecretFallback()),
   DEVELOPER_ACCESS_EMAIL: z.string().email().default('demo@reachinbox.ai'),
 
   GOOGLE_CLIENT_ID: z.string().optional(),

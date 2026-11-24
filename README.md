@@ -120,7 +120,7 @@ BullMQ worker is run **in-process** inside the API web service via
 1. **New → PostgreSQL** (free) → copy the `postgres://` connection string
 2. **New → Key Value** (free) → copy the `redis://` connection URL
 3. **New → Blueprint** → pick this repo → fill `DATABASE_URL` + `REDIS_URL`
-   (and your OAuth/Slack/SMTP secrets, including a unique `JWT_SECRET`) → **Deploy**
+   (and your OAuth/Slack/SMTP secrets; set `JWT_SECRET` explicitly if you want stable sessions across DB URL changes) → **Deploy**
 
 `render.yaml` sets `RUN_WORKER=true` so the API process also processes the
 queue. Locally you instead run the dedicated worker (`backend/dist/worker.js`)

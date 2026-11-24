@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+backend/dist/
+frontend/dist/
+*.tsbuildinfo
+
+# Secrets / local config
+.env
+.env.local
+.env.*.local
+!backend/.env.example
+
+# Logs
+*.log
+logs/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Playwright test artifacts
+.playwright-mcp/

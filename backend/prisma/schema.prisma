@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(uuid()) @db.Uuid
+  googleId         String?  @unique
+  email            String   @unique
+  name             String
+  avatarUrl        String?
+  slackAccessToken String?
+  slackWebhookUrl  String?
+  slackTeamId      String?
+  slackUserId      String?
+  slackConnectedAt DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  batches          Batch[]
+  emails           Email[]
+  senders          Sender[]
+}
+
+model Sender {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  email       String
+  name        String?
+  hourlyLimit Int?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails      Email[]
+  batches     Batch[]
+
+  @@unique([userId, email])
+}
+
+model Batch {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  senderId      String?  @db.Uuid
+  fromEmail     String
+  subject       String
+  body          String
+  startTime     DateTime
+  delayMs       Int
+  hourlyLimit   Int
+  total         Int
+  idempotencyKey String? @unique
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender        Sender?  @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  emails        Email[]
+
+  @@index([userId, createdAt])
+}
+
+model Email {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  batchId       String?   @db.Uuid
+  senderId      String?   @db.Uuid
+  toEmail       String
+  fromEmail     String
+  subject       String
+  body          String
+  sendAt        DateTime
+  sequence      Int       @default(0)
+  status        String    @default("scheduled")
+  jobId         String?   @unique
+  attempts      Int       @default(0)
+  rateLimitHits Int       @default(0)
+  messageId     String?
+  previewUrl    String?
+  error         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sentAt        DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch         Batch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  sender        Sender?   @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, sendAt])
+  @@index([batchId, sequence])
+  @@index([status, sendAt])
+}

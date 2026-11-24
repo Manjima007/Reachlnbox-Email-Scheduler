@@ -12,14 +12,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "sourceMap": true,
-    "types": ["node"],
-    // Ensure @types/node is found whether it's hoisted to the repo root
-    // (npm workspaces) or installed locally — covers Render's build too.
-    "typeRoots": [
-      "./node_modules/@types",
-      "../node_modules/@types",
-      "../../node_modules/@types"
-    ]
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

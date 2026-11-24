@@ -12,6 +12,7 @@
     "test": "npm test --workspace backend"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "@types/node": "^22.13.10"
   }
 }

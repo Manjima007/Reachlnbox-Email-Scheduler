@@ -17,8 +17,13 @@ services:
     plan: free
     buildCommand: >
       npm ci &&
-      mkdir -p backend/node_modules/@types &&
-      cp -R node_modules/@types/node backend/node_modules/@types/node &&
+      if [ -d node_modules/@types/node ]; then
+        mkdir -p backend/node_modules/@types;
+        cp -R node_modules/@types/node backend/node_modules/@types/node;
+      fi;
+      if [ ! -d backend/node_modules/@types/node ]; then
+        cd backend && npm install --no-save --no-audit --no-fund @types/node@22 && cd ..;
+      fi;
       cd backend && npx prisma generate && npx prisma migrate deploy &&
       npx tsc -p tsconfig.json &&
       cd ../frontend && npx vite build

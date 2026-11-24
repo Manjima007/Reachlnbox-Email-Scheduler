@@ -14,7 +14,14 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
-  JWT_SECRET: z.string().min(8).default('dev-only-secret-change-me'),
+  JWT_SECRET: z
+    .string()
+    .min(8)
+    .refine(
+      (value) => process.env.NODE_ENV !== 'production' || value !== 'dev-only-secret-change-me',
+      { message: 'JWT_SECRET must be set to a unique secret in production' },
+    )
+    .default('dev-only-secret-change-me'),
   DEVELOPER_ACCESS_EMAIL: z.string().email().default('demo@reachinbox.ai'),
 
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -47,6 +54,7 @@ const schema = z.object({
   MAX_EMAILS_PER_HOUR: positiveInt(200),
   RATE_LIMIT_SCOPE: z.enum(['global', 'sender']).default('sender'),
   JOB_ATTEMPTS: positiveInt(5),
+  SEND_LOCK_TTL_MS: positiveInt(120000),
   MAX_BATCH_SIZE: positiveInt(5000),
   MAX_SCHEDULE_AHEAD_HOURS: positiveInt(720),
 

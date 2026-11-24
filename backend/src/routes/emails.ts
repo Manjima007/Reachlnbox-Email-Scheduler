@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { Router } from 'express';
+import type { JobType } from 'bullmq';
 import { z } from 'zod';
 import { env } from '../env';
 import { prisma } from '../db';
@@ -112,24 +114,44 @@ emailsRouter.post(
     }
 
     const fromEmail = parsed.data.fromEmail.toLowerCase();
-    const emailRows = recipients.map((toEmail, index) => {
-      const id = randomUUID();
-      return {
-      id,
-      jobId: id,
-      userId: req.user!.id,
-      toEmail,
-      fromEmail,
-      subject: parsed.data.subject,
-      body: parsed.data.body,
-      sendAt: new Date(startTime.getTime() + index * parsed.data.delayMs),
-      sequence: index + 1,
-      status: 'scheduled',
-      };
-    });
+    let emailRows: Array<{
+      id: string;
+      jobId: string;
+      userId: string;
+      toEmail: string;
+      fromEmail: string;
+      subject: string;
+      body: string;
+      sendAt: Date;
+      sequence: number;
+      status: string;
+    }> = [];
 
+    async function cleanupFailedBatch(batchId: string | null) {
+      let cleaned = true;
+      try {
+        await prisma.email.deleteMany({ where: { id: { in: emailRows.map((row) => row.id) } } });
+        if (batchId) {
+          await prisma.batch.delete({ where: { id: batchId } });
+        }
+      } catch (error) {
+        console.error('[schedule] database cleanup failed:', error);
+        cleaned = false;
+      }
+      for (const row of emailRows) {
+        try {
+          await emailQueue.remove(row.jobId);
+        } catch (error) {
+          console.error('[schedule] queue cleanup failed:', error);
+          cleaned = false;
+        }
+      }
+      return cleaned;
+    }
+
+    let batch: { id: string } | null = null;
     try {
-      const batch = await prisma.$transaction(async (tx) => {
+      batch = await prisma.$transaction(async (tx) => {
         const sender = await tx.sender.upsert({
           where: { userId_email: { userId: req.user!.id, email: fromEmail } },
           update: {},
@@ -148,6 +170,21 @@ emailsRouter.post(
             total: recipients.length,
             idempotencyKey,
           },
+        });
+        emailRows = recipients.map((toEmail, index) => {
+          const id = randomUUID();
+          return {
+            id,
+            jobId: `${created.id}:${index + 1}`,
+            userId: req.user!.id,
+            toEmail,
+            fromEmail,
+            subject: parsed.data.subject,
+            body: parsed.data.body,
+            sendAt: new Date(startTime.getTime() + index * parsed.data.delayMs),
+            sequence: index + 1,
+            status: 'scheduled',
+          };
         });
         await tx.email.createMany({
           data: emailRows.map((row) => ({ ...row, batchId: created.id, senderId: sender.id })),
@@ -171,7 +208,7 @@ emailsRouter.post(
           name: 'send-email',
           data,
           opts: {
-            jobId: row.id,
+            jobId: row.jobId,
             delay: Math.max(0, row.sendAt.getTime() - Date.now()),
             priority: Math.min(row.sequence, 1000000),
           },
@@ -197,11 +234,21 @@ emailsRouter.post(
         hourlyLimit: parsed.data.hourlyLimit,
       });
     } catch (error) {
+      if (idempotencyKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = error.meta?.target;
+        const targetsKey = Array.isArray(target)
+          ? target.includes('idempotencyKey')
+          : String(target ?? '').includes('idempotencyKey');
+        if (targetsKey) {
+          const existing = await prisma.batch.findUnique({ where: { idempotencyKey } });
+          if (existing) {
+            res.json({ batchId: existing.id, total: existing.total, duplicate: true });
+            return;
+          }
+        }
+      }
       console.error('[schedule] failed:', error);
-      await prisma.email.updateMany({
-        where: { id: { in: emailRows.map((row) => row.id) } },
-        data: { status: 'failed', error: 'Could not enqueue job' },
-      });
+      await cleanupFailedBatch(batch?.id ?? null);
       res.status(500).json({ error: 'Could not schedule the batch' });
     }
   }),
@@ -231,7 +278,7 @@ emailsRouter.get(
     const statuses: Record<string, string[]> = {
       all: ['scheduled', 'processing', 'rate_limited', 'sent', 'failed', 'cancelled'],
       scheduled: ['scheduled', 'processing', 'rate_limited'],
-      sent: ['sent'],
+      sent: ['sent', 'failed'],
       failed: ['failed'],
     };
     const where = {
@@ -424,7 +471,7 @@ emailsRouter.get(
       res.status(400).json({ error: 'Invalid state' });
       return;
     }
-    const jobs = await emailQueue.getJobs([state as 'delayed'], 0, 24, false);
+    const jobs = await emailQueue.getJobs([state as JobType], 0, 24, false);
     res.json({
       data: jobs.map((job) => ({
         id: job.id,

@@ -125,7 +125,11 @@ authRouter.get(
     }
     try {
       jwt.verify(state, env.JWT_SECRET);
+      if (req.cookies?.reachinbox_oauth_state !== state) {
+        throw new Error('state mismatch');
+      }
     } catch {
+      res.clearCookie('reachinbox_oauth_state', { path: '/' });
       res.redirect(`${env.FRONTEND_URL}/login?error=invalid_state`);
       return;
     }
@@ -172,6 +176,12 @@ authRouter.get('/slack', requireAuth, (req: AuthedRequest, res) => {
     return;
   }
   const state = jwt.sign({ sub: req.user!.id }, env.JWT_SECRET, { expiresIn: '10m' });
+  res.cookie('reachinbox_slack_state', state, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 10 * 60 * 1000,
+    path: '/',
+  });
   res.redirect(slackConnectUrl(state));
 });
 
@@ -180,10 +190,22 @@ authRouter.get(
   requireAuth,
   asyncHandler(async (req: AuthedRequest, res) => {
     const code = req.query.code;
-    if (typeof code !== 'string') {
+    const state = req.query.state;
+    if (typeof code !== 'string' || typeof state !== 'string') {
       res.redirect(`${env.FRONTEND_URL}/?slack=invalid_callback`);
       return;
     }
+    try {
+      jwt.verify(state, env.JWT_SECRET);
+      if (req.cookies?.reachinbox_slack_state !== state) {
+        throw new Error('state mismatch');
+      }
+    } catch {
+      res.clearCookie('reachinbox_slack_state', { path: '/' });
+      res.redirect(`${env.FRONTEND_URL}/?slack=invalid_state`);
+      return;
+    }
+    res.clearCookie('reachinbox_slack_state', { path: '/' });
     try {
       const tokens = await exchangeSlackCode(code);
       await prisma.user.update({

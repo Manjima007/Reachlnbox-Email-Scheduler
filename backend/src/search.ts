@@ -46,6 +46,7 @@ async function ensureIndex(): Promise<boolean> {
       return true;
     })().catch((error) => {
       console.warn('[elasticsearch] unavailable, DB fallback enabled:', error instanceof Error ? error.message : error);
+      indexReady = null;
       return false;
     });
   }

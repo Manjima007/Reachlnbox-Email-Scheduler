@@ -65,9 +65,18 @@ function localDateTime(offsetMs: number) {
   return date.toISOString().slice(0, 16);
 }
 
+function tomorrowAt(hour: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(hour, 0, 0, 0);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 export function Compose({ config, senders, onBack, onScheduled, notify }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [fromEmail, setFromEmail] = useState('manjimadutta42@gmail.com');
@@ -152,6 +161,9 @@ export function Compose({ config, senders, onBack, onScheduled, notify }: Props)
       return;
     }
     setSubmitting(true);
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
     try {
       const result = await api.schedule(
         {
@@ -164,8 +176,9 @@ export function Compose({ config, senders, onBack, onScheduled, notify }: Props)
           hourlyLimit,
           recipients,
         },
-        crypto.randomUUID(),
+        idempotencyKeyRef.current,
       );
+      idempotencyKeyRef.current = null;
       notify(
         sendNow
           ? `${result.total} email${result.total === 1 ? '' : 's'} queued to send now`
@@ -232,7 +245,7 @@ export function Compose({ config, senders, onBack, onScheduled, notify }: Props)
               <Calendar size={16} />
             </button>
             <Button type="button" loading={submitting} icon={<Send size={15} />} onClick={() => formRef.current?.requestSubmit()}>
-              {sendNow ? 'Send Now' : 'Send'}
+              {sendNow ? 'Schedule now' : 'Schedule'}
             </Button>
           </div>
         </div>
@@ -279,7 +292,7 @@ export function Compose({ config, senders, onBack, onScheduled, notify }: Props)
                     type="button"
                     onClick={() => {
                       setSendNow(false);
-                      setStartTime(localDateTime(86_400_000));
+                      setStartTime(tomorrowAt(10));
                     }}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                   >
@@ -322,6 +335,11 @@ export function Compose({ config, senders, onBack, onScheduled, notify }: Props)
                 {overflow > 0 && (
                   <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">
                     +{overflow}
+                  </span>
+                )}
+                {recipients.length > 0 && (
+                  <span className="whitespace-nowrap text-[11px] font-semibold text-slate-500">
+                    {recipients.length} email{recipients.length === 1 ? '' : 's'} detected
                   </span>
                 )}
                 <input

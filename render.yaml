@@ -42,11 +42,13 @@ services:
       - key: SLACK_REDIRECT_URI
         value: https://reachinbox-api.onrender.com/api/auth/slack/callback
       - key: JWT_SECRET
-        value: dev-only-secret-change-me
+        sync: false
       - key: DEV_LOGIN_ENABLED
-        value: "true"
+        value: "false"
       - key: ELASTICSEARCH_ENABLED
         value: "false"
       # Run the BullMQ worker inside the API process (single-service deploy).
       - key: RUN_WORKER
         value: "true"
+      - key: SEND_LOCK_TTL_MS
+        value: "120000"

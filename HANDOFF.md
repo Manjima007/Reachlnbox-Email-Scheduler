@@ -34,21 +34,19 @@
 - Restart persistence proved: scheduled a fresh delayed job, restarted worker, job still sent at correct time.
 - BullBoard route and `/api/queue/stats` respond.
 
-## Critical issue (do this first)
-- Last backend rebuild failed: `npm run build --workspace backend` ended with `npm error ... prisma generate && tsc -p tsconfig.json`. Exact reason was not captured — rerun it to see.
-- Because of that failure, `backend/dist/worker.js` is stale: it still contains `reserveSendSlot(...)` and lacks the new `limiter:`. Source `backend/src/worker.ts` is correct (`limiter` present, `reserveSendSlot` removed). Source `rateLimiter.ts` has the fixed non-inflating Lua script; test expectation updated to `third.count === 2`.
-- Symptom: jobs that exceed the hourly limit remain `scheduled`/`delayed` with high `attemptsMade` (e.g. `r3/r4`, `l4–l6`, `lead2`) instead of becoming `rate_limited`. No `rl:*` keys were present after tests, confirming old limiter behavior.
-- Fix path: rerun build, confirm `dist/worker.js` has `limiter:` and no `reserveSendSlot`, kill stale worker process, restart from `backend/dist/worker.js`.
+## Current status
+- Backend rebuild succeeds; restart recovery now runs in both standalone and inline (Render) worker modes.
+- Sends use a lease-guarded DB claim (`lockedAt`/`lockOwner`, `SEND_LOCK_TTL_MS`) plus startup reconciliation from DB to Redis.
+- Rate-limit spills create a new delayed job for the next window instead of consuming BullMQ retry attempts, and failed sends release their reserved slot.
+- Slack alert flag is only claimed for connected users and released when delivery fails; OAuth `state` is now verified for Google and Slack.
+- `npm test` passes (2 tests); `npm run typecheck` passes; frontend production build succeeds.
 
-## Other known gaps / failures
-- No real Google or Slack OAuth credentials in `backend/.env` → OAuth code implemented but not live-verified; no actual Slack message sent yet.
-- Elasticsearch not installed locally → DB fallback active; ES indexing/search unverified.
-- Redis 5.x emits BullMQ "minimum 6.2 recommended" warnings.
-- `npm test` (vitest) not run yet.
-- Frontend only typechecked/built, not opened in a browser.
-- Debug emails/jobs remain in DB/Redis; clean before demo.
-- Not yet created: README, `.gitignore`, `docker-compose.yml`, Ethereal credential helper script.
-- Not yet done: demo video (≤5 min), private GitHub repo, grant access to `Mitrajit and Yadav036`, submit ClickUp form.
+## Remaining external checks
+- Real Google/Slack OAuth credentials must still be live-verified in the target environment.
+- Elasticsearch indexing/search should be verified if `ELASTICSEARCH_ENABLED=true`.
+- Redis 5.x emits BullMQ "minimum 6.2 recommended" warnings; use Redis 7 for a clean run.
+- Clean debug emails/jobs before demo.
+- Demo video (≤5 min), private GitHub repo, grant access to `Mitrajit and Yadav036`, submit ClickUp form.
 - Attached screenshot in prior message could not be viewed (model has no image input).
 
 ## Useful commands
@@ -70,9 +68,7 @@ Start-Process -FilePath "node" -ArgumentList "dist/worker.js" -WorkingDirectory 
 ```
 
 ## Ordered next steps
-1. Fix/verify backend build; restart worker with fixed code.
-2. Clean stale jobs; flush `rl:*` keys; verify 2 sent + 2 `rate_limited` with a fresh sender and Slack alert log line.
-3. Run `npm test`, `npm run typecheck`, `npm run build`.
-4. Write README, `.gitignore`, `docker-compose.yml`, Ethereal helper.
-5. Configure real OAuth/ES if available; browser-test frontend.
-6. Record demo, create repo + collaborator, submit form.
+1. Apply the new Prisma migration (`npx prisma migrate deploy --schema backend/prisma/schema.prisma`) and rebuild before restarting the worker/API.
+2. Clean stale jobs; verify 2 sent + remaining `rate_limited` with a fresh sender and a live Slack alert.
+3. Configure real OAuth/ES if available; browser-test frontend.
+4. Record demo, create repo + collaborator, submit form.

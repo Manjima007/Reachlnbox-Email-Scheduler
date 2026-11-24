@@ -77,6 +77,10 @@ model Email {
   messageId     String?
   previewUrl    String?
   error         String?
+  lockedAt      DateTime?
+  lockOwner     String?
+  sendAttempts  Int       @default(0)
+  availableAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   sentAt        DateTime?
@@ -87,4 +91,5 @@ model Email {
   @@index([userId, status, sendAt])
   @@index([batchId, sequence])
   @@index([status, sendAt])
+  @@index([status, lockedAt])
 }

@@ -206,10 +206,9 @@ export async function notifySlackRateLimit(
  */
 export async function resolveBotChannel(token: string, configured: string): Promise<string> {
   try {
-    const list = await fetch('https://slack.com/api/conversations.list', {
-      method: 'POST',
+    const query = new URLSearchParams({ types: 'public_channel', exclude_archived: 'true', limit: '200' });
+    const list = await fetch(`https://slack.com/api/conversations.list?${query.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ types: 'public_channel', exclude_archived: true }),
     }).then((r) => r.json()) as { ok: boolean; channels?: { id: string; name: string }[] };
     if (list.ok && list.channels?.length) {
       // Match by name first (SLACK_CHANNEL may be "#new-channel" or "new-channel").

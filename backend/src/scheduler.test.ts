@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { extractEmails } from './utils/emails';
-import { checkRateLimit } from './rateLimiter';
+import { checkRateLimit, releaseRateLimitSlot } from './rateLimiter';
 import { redis } from './redis';
 
 afterAll(async () => {
@@ -29,5 +29,10 @@ describe('redis backed hourly limiter', () => {
     expect(third.allowed).toBe(false);
     expect(third.count).toBe(2); // blocked send must not increment the counter
     expect(third.retryAt).toBeGreaterThan(Date.now());
+
+    await releaseRateLimitSlot(third);
+    const fourth = await checkRateLimit(sender, 2);
+    expect(fourth.allowed).toBe(true);
+    expect(fourth.count).toBe(2);
   });
 });

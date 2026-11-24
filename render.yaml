@@ -18,8 +18,8 @@ services:
     buildCommand: >
       npm ci &&
       mkdir -p backend/node_modules/@types &&
-      (cp -R node_modules/@types/node backend/node_modules/@types/node 2>/dev/null ||
-       cd backend && npm install --prefix . --no-save --no-audit --no-fund @types/node@22.13.10 @types/nodemailer@1.0.9) &&
+      cp -R node_modules/@types/node backend/node_modules/@types/node 2>/dev/null ||
+      cd backend && npm install --no-save --no-audit --no-fund @types/node && cd .. ;
       cd backend &&
       npx prisma generate &&
       npx prisma migrate deploy &&

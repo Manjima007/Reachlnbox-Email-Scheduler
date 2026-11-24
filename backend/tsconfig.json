@@ -12,7 +12,14 @@
     "outDir": "dist",
     "rootDir": "src",
     "sourceMap": true,
-    "types": ["node"]
+    "types": ["node"],
+    // @types/node is hoisted to the repo root by npm workspaces, but tsc runs
+    // inside backend/. Point typeRoots at both so it resolves in any layout
+    // (local dev AND Render, where it lands at the repo root after `npm ci`).
+    "typeRoots": [
+      "../node_modules/@types",
+      "./node_modules/@types"
+    ]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

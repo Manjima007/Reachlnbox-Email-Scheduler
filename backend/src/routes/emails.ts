@@ -1,7 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
 import { Router } from 'express';
-import type { JobType } from 'bullmq';
 import { z } from 'zod';
 import { env } from '../env';
 import { prisma } from '../db';
@@ -15,6 +13,15 @@ import { extractEmails } from '../utils/emails';
 export const emailsRouter = Router();
 
 emailsRouter.use(requireAuth);
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function emailView(email: {
   id: string;
@@ -42,7 +49,7 @@ function emailView(email: {
     createdAt: email.createdAt.toISOString(),
     sentAt: email.sentAt ? email.sentAt.toISOString() : null,
     rateLimitHits: email.rateLimitHits,
-    previewUrl: email.previewUrl,
+    previewUrl: `/api/emails/${email.id}/preview`,
     error: email.error,
     sequence: email.sequence,
   };
@@ -114,44 +121,24 @@ emailsRouter.post(
     }
 
     const fromEmail = parsed.data.fromEmail.toLowerCase();
-    let emailRows: Array<{
-      id: string;
-      jobId: string;
-      userId: string;
-      toEmail: string;
-      fromEmail: string;
-      subject: string;
-      body: string;
-      sendAt: Date;
-      sequence: number;
-      status: string;
-    }> = [];
+    const emailRows = recipients.map((toEmail, index) => {
+      const id = randomUUID();
+      return {
+      id,
+      jobId: id,
+      userId: req.user!.id,
+      toEmail,
+      fromEmail,
+      subject: parsed.data.subject,
+      body: parsed.data.body,
+      sendAt: new Date(startTime.getTime() + index * parsed.data.delayMs),
+      sequence: index + 1,
+      status: 'scheduled',
+      };
+    });
 
-    async function cleanupFailedBatch(batchId: string | null) {
-      let cleaned = true;
-      try {
-        await prisma.email.deleteMany({ where: { id: { in: emailRows.map((row) => row.id) } } });
-        if (batchId) {
-          await prisma.batch.delete({ where: { id: batchId } });
-        }
-      } catch (error) {
-        console.error('[schedule] database cleanup failed:', error);
-        cleaned = false;
-      }
-      for (const row of emailRows) {
-        try {
-          await emailQueue.remove(row.jobId);
-        } catch (error) {
-          console.error('[schedule] queue cleanup failed:', error);
-          cleaned = false;
-        }
-      }
-      return cleaned;
-    }
-
-    let batch: { id: string } | null = null;
     try {
-      batch = await prisma.$transaction(async (tx) => {
+      const batch = await prisma.$transaction(async (tx) => {
         const sender = await tx.sender.upsert({
           where: { userId_email: { userId: req.user!.id, email: fromEmail } },
           update: {},
@@ -170,21 +157,6 @@ emailsRouter.post(
             total: recipients.length,
             idempotencyKey,
           },
-        });
-        emailRows = recipients.map((toEmail, index) => {
-          const id = randomUUID();
-          return {
-            id,
-            jobId: `${created.id}:${index + 1}`,
-            userId: req.user!.id,
-            toEmail,
-            fromEmail,
-            subject: parsed.data.subject,
-            body: parsed.data.body,
-            sendAt: new Date(startTime.getTime() + index * parsed.data.delayMs),
-            sequence: index + 1,
-            status: 'scheduled',
-          };
         });
         await tx.email.createMany({
           data: emailRows.map((row) => ({ ...row, batchId: created.id, senderId: sender.id })),
@@ -208,7 +180,7 @@ emailsRouter.post(
           name: 'send-email',
           data,
           opts: {
-            jobId: row.jobId,
+            jobId: row.id,
             delay: Math.max(0, row.sendAt.getTime() - Date.now()),
             priority: Math.min(row.sequence, 1000000),
           },
@@ -234,21 +206,11 @@ emailsRouter.post(
         hourlyLimit: parsed.data.hourlyLimit,
       });
     } catch (error) {
-      if (idempotencyKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const target = error.meta?.target;
-        const targetsKey = Array.isArray(target)
-          ? target.includes('idempotencyKey')
-          : String(target ?? '').includes('idempotencyKey');
-        if (targetsKey) {
-          const existing = await prisma.batch.findUnique({ where: { idempotencyKey } });
-          if (existing) {
-            res.json({ batchId: existing.id, total: existing.total, duplicate: true });
-            return;
-          }
-        }
-      }
       console.error('[schedule] failed:', error);
-      await cleanupFailedBatch(batch?.id ?? null);
+      await prisma.email.updateMany({
+        where: { id: { in: emailRows.map((row) => row.id) } },
+        data: { status: 'failed', error: 'Could not enqueue job' },
+      });
       res.status(500).json({ error: 'Could not schedule the batch' });
     }
   }),
@@ -278,7 +240,7 @@ emailsRouter.get(
     const statuses: Record<string, string[]> = {
       all: ['scheduled', 'processing', 'rate_limited', 'sent', 'failed', 'cancelled'],
       scheduled: ['scheduled', 'processing', 'rate_limited'],
-      sent: ['sent', 'failed'],
+      sent: ['sent'],
       failed: ['failed'],
     };
     const where = {
@@ -308,6 +270,51 @@ emailsRouter.get(
     }
     const result = await searchEmails(req.user!.id, q.slice(0, 200), 100);
     res.json({ data: result.emails, source: result.source });
+  }),
+);
+
+emailsRouter.get(
+  '/emails/:id/preview',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const email = await prisma.email.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+    });
+    if (!email) {
+      res.status(404).send('Email not found');
+      return;
+    }
+    const sentAt = email.sentAt ? email.sentAt.toISOString() : 'Not sent yet';
+    res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(email.subject)}</title>
+  <style>
+    body { margin: 0; background: #f1f5f9; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color: #0f172a; }
+    .card { max-width: 720px; margin: 40px auto; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(15,23,42,.08); overflow: hidden; }
+    header { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
+    h1 { margin: 0 0 12px; font-size: 20px; }
+    dl { display: grid; grid-template-columns: 70px 1fr; gap: 6px 12px; margin: 0; font-size: 13px; color: #475569; }
+    dt { font-weight: 600; }
+    dd { margin: 0; word-break: break-word; }
+    article { padding: 24px; white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <header>
+      <h1>${escapeHtml(email.subject)}</h1>
+      <dl>
+        <dt>From</dt><dd>${escapeHtml(email.fromEmail)}</dd>
+        <dt>To</dt><dd>${escapeHtml(email.toEmail)}</dd>
+        <dt>Sent</dt><dd>${escapeHtml(sentAt)}</dd>
+      </dl>
+    </header>
+    <article>${escapeHtml(email.body)}</article>
+  </main>
+</body>
+</html>`);
   }),
 );
 
@@ -471,7 +478,7 @@ emailsRouter.get(
       res.status(400).json({ error: 'Invalid state' });
       return;
     }
-    const jobs = await emailQueue.getJobs([state as JobType], 0, 24, false);
+    const jobs = await emailQueue.getJobs([state as 'delayed'], 0, 24, false);
     res.json({
       data: jobs.map((job) => ({
         id: job.id,

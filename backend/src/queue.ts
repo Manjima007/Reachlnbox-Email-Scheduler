@@ -26,14 +26,17 @@ export const emailQueue = new Queue<EmailJobData, EmailJobResult>(EMAIL_QUEUE_NA
   },
 });
 
+// Apply the throttle at the worker level: at most 1 send every MIN_SEND_DELAY_MS
+// per worker instance, with the configured concurrency. This is the "minimum delay
+// between individual sends" required by the assignment — BullMQ's limiter option.
 export function workerOptions() {
   return {
     concurrency: env.WORKER_CONCURRENCY,
-    lockDuration: env.SEND_LOCK_TTL_MS,
-    stalledInterval: env.SEND_LOCK_TTL_MS + 10000,
     limiter: {
       max: 1,
       duration: env.MIN_SEND_DELAY_MS,
+      // Key by scope so multiple workers/instances share the same throttle.
+      key: `send-limiter:${env.RATE_LIMIT_SCOPE === 'global' ? 'global' : 'per-sender'}`,
     },
   };
 }

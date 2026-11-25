@@ -9,9 +9,6 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 5
-    volumes:
-      - redisdata:/data
-    command: ["redis-server", "--appendonly", "yes"]
 
   postgres:
     image: postgres:16
@@ -42,6 +39,5 @@ services:
       - esdata:/usr/share/elasticsearch/data
 
 volumes:
-  redisdata:
   pgdata:
   esdata:

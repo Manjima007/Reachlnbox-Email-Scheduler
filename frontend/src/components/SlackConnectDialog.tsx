@@ -123,9 +123,10 @@ export function SlackConnectDialog({ open, user, onClose, onConnected, onDisconn
                 Alerts then post live to the configured channel.
               </p>
               <p className="mt-1.5 text-brand-700">
-                <b>If it fails with invalid_auth:</b> make sure your app's <b>Redirect URLs</b> include{' '}
-                <code className="rounded bg-white px-1 py-0.5">http://localhost:4000/api/auth/slack/callback</code> and
-                the secret in <code className="rounded bg-white px-1 py-0.5">.env</code> matches.
+                Slack requires an <b>HTTPS</b> redirect URL, so OAuth cannot complete on plain localhost. Use the{' '}
+                <b>Webhook</b> or <b>Token</b> tab locally, or point{' '}
+                <code className="rounded bg-white px-1 py-0.5">SLACK_REDIRECT_URI</code> at an HTTPS tunnel / deployed URL
+                that is also listed under your app's Redirect URLs.
               </p>
             </div>
 

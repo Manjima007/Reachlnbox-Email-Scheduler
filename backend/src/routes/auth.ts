@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { z } from 'zod';
@@ -11,7 +11,7 @@ import {
   requireAuth,
   setSessionCookie,
 } from '../middleware/auth';
-import { exchangeSlackCode, slackConnectUrl, sendSlackTestMessage, validateSlackBotToken, SLACK_BOT_TOKEN } from '../slack';
+import { exchangeSlackCode, slackConnectUrl, sendSlackTestMessage, validateSlackBotToken, SLACK_BOT_TOKEN, SLACK_WEBHOOK_URL } from '../slack';
 
 export const authRouter = Router();
 
@@ -34,26 +34,6 @@ function publicUser(user: {
     slackConnected: Boolean(user.slackAccessToken || user.slackWebhookUrl),
     slackTeamId: user.slackTeamId,
   };
-}
-
-function requestOrigin(req: Request) {
-  const proto = ((req.get('x-forwarded-proto') ?? (req.secure ? 'https' : 'http')).split(',')[0] ?? '').trim();
-  const host = (req.get('x-forwarded-host') ?? req.get('host') ?? '').split(',')[0]?.trim() ?? '';
-  return host ? `${proto}://${host}` : env.FRONTEND_URL;
-}
-
-function frontendBase(req: Request) {
-  if (process.env.RENDER === 'true' || env.NODE_ENV === 'production') {
-    return requestOrigin(req);
-  }
-  return env.FRONTEND_URL;
-}
-
-function apiBase(req: Request) {
-  if (process.env.RENDER === 'true' || env.NODE_ENV === 'production') {
-    return requestOrigin(req);
-  }
-  return env.FRONTEND_URL.includes('localhost:5173') ? 'http://localhost:4000' : env.FRONTEND_URL;
 }
 
 authRouter.get('/me', requireAuth, (req: AuthedRequest, res) => {
@@ -108,13 +88,13 @@ authRouter.post(
 
 authRouter.get('/google', (req, res) => {
   if (!googleConfigured) {
-    res.redirect(`${frontendBase(req)}/login?error=google_not_configured`);
+    res.redirect(`${env.FRONTEND_URL}/login?error=google_not_configured`);
     return;
   }
   const client = new OAuth2Client(
     env.GOOGLE_CLIENT_ID,
     env.GOOGLE_CLIENT_SECRET,
-    `${apiBase(req)}/api/auth/google/callback`,
+    env.GOOGLE_CALLBACK_URL,
   );
   const state = jwt.sign({ nonce: Math.random().toString(36).slice(2) }, env.JWT_SECRET, {
     expiresIn: '10m',
@@ -140,23 +120,19 @@ authRouter.get(
     const code = req.query.code;
     const state = req.query.state;
     if (typeof code !== 'string' || typeof state !== 'string') {
-      res.redirect(`${frontendBase(req)}/login?error=invalid_callback`);
+      res.redirect(`${env.FRONTEND_URL}/login?error=invalid_callback`);
       return;
     }
     try {
       jwt.verify(state, env.JWT_SECRET);
-      if (req.cookies?.reachinbox_oauth_state !== state) {
-        throw new Error('state mismatch');
-      }
     } catch {
-      res.clearCookie('reachinbox_oauth_state', { path: '/' });
-      res.redirect(`${frontendBase(req)}/login?error=invalid_state`);
+      res.redirect(`${env.FRONTEND_URL}/login?error=invalid_state`);
       return;
     }
     const client = new OAuth2Client(
       env.GOOGLE_CLIENT_ID,
       env.GOOGLE_CLIENT_SECRET,
-      `${apiBase(req)}/api/auth/google/callback`,
+      env.GOOGLE_CALLBACK_URL,
     );
     const { tokens } = await client.getToken(code);
     client.setCredentials(tokens);
@@ -166,7 +142,7 @@ authRouter.get(
     });
     const profile = ticket.getPayload();
     if (!profile?.email) {
-      res.redirect(`${frontendBase(req)}/login?error=no_email`);
+      res.redirect(`${env.FRONTEND_URL}/login?error=no_email`);
       return;
     }
 
@@ -186,23 +162,17 @@ authRouter.get(
     });
     setSessionCookie(res, user.id);
     res.clearCookie('reachinbox_oauth_state', { path: '/' });
-    res.redirect(`${frontendBase(req)}/?auth=success`);
+    res.redirect(`${env.FRONTEND_URL}/?auth=success`);
   }),
 );
 
 authRouter.get('/slack', requireAuth, (req: AuthedRequest, res) => {
   if (!slackConfigured) {
-    res.redirect(`${frontendBase(req)}/?slack=not_configured`);
+    res.redirect(`${env.FRONTEND_URL}/?slack=not_configured`);
     return;
   }
   const state = jwt.sign({ sub: req.user!.id }, env.JWT_SECRET, { expiresIn: '10m' });
-  res.cookie('reachinbox_slack_state', state, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 10 * 60 * 1000,
-    path: '/',
-  });
-  res.redirect(slackConnectUrl(state, `${apiBase(req)}/api/auth/slack/callback`));
+  res.redirect(slackConnectUrl(state));
 });
 
 authRouter.get(
@@ -210,24 +180,12 @@ authRouter.get(
   requireAuth,
   asyncHandler(async (req: AuthedRequest, res) => {
     const code = req.query.code;
-    const state = req.query.state;
-    if (typeof code !== 'string' || typeof state !== 'string') {
-      res.redirect(`${frontendBase(req)}/?slack=invalid_callback`);
+    if (typeof code !== 'string') {
+      res.redirect(`${env.FRONTEND_URL}/?slack=invalid_callback`);
       return;
     }
     try {
-      jwt.verify(state, env.JWT_SECRET);
-      if (req.cookies?.reachinbox_slack_state !== state) {
-        throw new Error('state mismatch');
-      }
-    } catch {
-      res.clearCookie('reachinbox_slack_state', { path: '/' });
-      res.redirect(`${frontendBase(req)}/?slack=invalid_state`);
-      return;
-    }
-    res.clearCookie('reachinbox_slack_state', { path: '/' });
-    try {
-      const tokens = await exchangeSlackCode(code, `${apiBase(req)}/api/auth/slack/callback`);
+      const tokens = await exchangeSlackCode(code);
       await prisma.user.update({
         where: { id: req.user!.id },
         data: {
@@ -240,7 +198,7 @@ authRouter.get(
           slackConnectedAt: new Date(),
         },
       });
-      res.redirect(`${frontendBase(req)}/?slack=connected`);
+      res.redirect(`${env.FRONTEND_URL}/?slack=connected`);
     } catch (error) {
       // The OAuth code exchange can fail on private/trial workspaces (Slack
       // won't honor the redirect_uri there). In that case, fall back in order:
@@ -253,7 +211,16 @@ authRouter.get(
 
       if (user?.slackWebhookUrl) {
         await prisma.user.update({ where: { id: user.id }, data: { slackConnectedAt: new Date() } });
-        res.redirect(`${frontendBase(req)}/?slack=connected`);
+        res.redirect(`${env.FRONTEND_URL}/?slack=connected`);
+        return;
+      }
+
+      if (SLACK_WEBHOOK_URL.startsWith('https://hooks.slack.com/services/')) {
+        await prisma.user.update({
+          where: { id: req.user!.id },
+          data: { slackWebhookUrl: SLACK_WEBHOOK_URL, slackConnectedAt: new Date() },
+        });
+        res.redirect(`${env.FRONTEND_URL}/?slack=connected`);
         return;
       }
 
@@ -268,14 +235,14 @@ authRouter.get(
               slackConnectedAt: new Date(),
             },
           });
-          res.redirect(`${frontendBase(req)}/?slack=connected`);
+          res.redirect(`${env.FRONTEND_URL}/?slack=connected`);
           return;
         } catch (botErr) {
           console.warn('[slack] bot token fallback failed:', (botErr as Error).message);
         }
       }
 
-      res.redirect(`${frontendBase(req)}/?slack=failed`);
+      res.redirect(`${env.FRONTEND_URL}/?slack=failed`);
     }
   }),
 );

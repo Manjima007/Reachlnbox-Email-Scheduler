@@ -11,6 +11,7 @@ const SLACK_AUTH_TEST_URL = 'https://slack.com/api/auth.test';
 // private/trial workspaces, where Slack won't honor the redirect_uri for
 // oauth.v2.access. The bot token still posts to channels the bot is in.
 export const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN ?? env.SLACK_BOT_TOKEN;
+export const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL ?? env.SLACK_WEBHOOK_URL;
 
 /**
  * Validates a Bot User OAuth Token (xoxb-…) and returns the team + bot name.
@@ -42,10 +43,10 @@ export async function validateSlackBotToken(
   };
 }
 
-export function slackConnectUrl(state: string, redirectUri = env.SLACK_REDIRECT_URI): string {
+export function slackConnectUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: env.SLACK_CLIENT_ID ?? '',
-    redirect_uri: redirectUri,
+    redirect_uri: env.SLACK_REDIRECT_URI,
     response_type: 'code',
     scope: 'chat:write,chat:write.public,channels:read,groups:read',
     state,
@@ -60,7 +61,7 @@ export function slackConnectUrl(state: string, redirectUri = env.SLACK_REDIRECT_
   return `${SLACK_AUTH_URL}?${params.toString()}`;
 }
 
-export async function exchangeSlackCode(code: string, redirectUri = env.SLACK_REDIRECT_URI): Promise<{
+export async function exchangeSlackCode(code: string): Promise<{
   accessToken: string;
   teamId: string | null;
   userId: string | null;
@@ -77,7 +78,7 @@ export async function exchangeSlackCode(code: string, redirectUri = env.SLACK_RE
       code,
       client_id: env.SLACK_CLIENT_ID!,
       client_secret: env.SLACK_CLIENT_SECRET!,
-      redirect_uri: redirectUri,
+      redirect_uri: env.SLACK_REDIRECT_URI,
     }),
   });
   const payload = (await response.json()) as {
@@ -95,8 +96,7 @@ export async function exchangeSlackCode(code: string, redirectUri = env.SLACK_RE
     const hint =
       payload.error === 'invalid_auth'
         ? ' — most often a redirect_uri mismatch. Confirm your Slack app\'s "Redirect URLs" include: ' +
-           redirectUri
-
+          env.SLACK_REDIRECT_URI
         : payload.error === 'invalid_client_id'
           ? ' — the client_id (SLACK_CLIENT_ID) does not exist. Regenerate it in your app.'
           : '';
@@ -207,9 +207,10 @@ export async function notifySlackRateLimit(
  */
 export async function resolveBotChannel(token: string, configured: string): Promise<string> {
   try {
-    const query = new URLSearchParams({ types: 'public_channel', exclude_archived: 'true', limit: '200' });
-    const list = await fetch(`https://slack.com/api/conversations.list?${query.toString()}`, {
+    const list = await fetch('https://slack.com/api/conversations.list', {
+      method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ types: 'public_channel', exclude_archived: true }),
     }).then((r) => r.json()) as { ok: boolean; channels?: { id: string; name: string }[] };
     if (list.ok && list.channels?.length) {
       // Match by name first (SLACK_CHANNEL may be "#new-channel" or "new-channel").

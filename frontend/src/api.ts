@@ -31,20 +31,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: mergedHeaders,
   });
   const text = await response.text();
-  let payload: unknown = null;
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      if (!response.ok) {
-        throw new ApiError(`Request failed (${response.status})`, response.status);
-      }
-      throw new Error('Invalid JSON response from server');
-    }
-  }
+  const payload = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    const body = payload as { error?: string } | null;
-    throw new ApiError(body?.error ?? `Request failed (${response.status})`, response.status);
+    throw new ApiError(payload?.error ?? `Request failed (${response.status})`, response.status);
   }
   return payload as T;
 }

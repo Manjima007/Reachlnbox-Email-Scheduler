@@ -49,7 +49,6 @@ export function Dashboard({ auth, onLogout, onAuthChanged, notify }: Props) {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchSource, setSearchSource] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [composeOpen, setComposeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -88,10 +87,8 @@ export function Dashboard({ auth, onLogout, onAuthChanged, notify }: Props) {
   useEffect(() => {
     if (tab !== 'search' || query.trim().length < 2) {
       setSearchResults([]);
-      setSearchLoading(false);
       return;
     }
-    setSearchLoading(true);
     const timer = window.setTimeout(async () => {
       try {
         const result = await api.search(query.trim());
@@ -99,8 +96,6 @@ export function Dashboard({ auth, onLogout, onAuthChanged, notify }: Props) {
         setSearchSource(result.source);
       } catch (error) {
         notify(error instanceof Error ? error.message : 'Search failed', 'error');
-      } finally {
-        setSearchLoading(false);
       }
     }, 300);
     return () => window.clearTimeout(timer);
@@ -244,8 +239,6 @@ export function Dashboard({ auth, onLogout, onAuthChanged, notify }: Props) {
               </div>
               {query.trim().length < 2 ? (
                 <EmptyState title="Search your emails" description="Type at least two characters to search across all scheduled and sent emails." />
-              ) : searchLoading ? (
-                <div className="p-5"><LoadingRows /></div>
               ) : searchResults.length === 0 ? (
                 <EmptyState title="No matches" description="Try a different recipient, subject or keyword." />
               ) : (

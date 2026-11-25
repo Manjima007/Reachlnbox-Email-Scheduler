@@ -1,14 +1,6 @@
 import { redis, HOUR_MS, hourWindow } from './redis';
 import { env } from './env';
 
-const RELEASE_SLOT_SCRIPT = `
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-if current > 0 then
-  redis.call('DECR', KEYS[1])
-end
-return current
-`;
-
 const RATE_LIMIT_SCRIPT = `
 local limit = tonumber(ARGV[1])
 local windowMs = tonumber(ARGV[2])
@@ -68,15 +60,7 @@ export async function checkRateLimit(
   };
 }
 
-export async function releaseRateLimitSlot(decision: RateLimitDecision): Promise<void> {
-  await redis.eval(RELEASE_SLOT_SCRIPT, 1, decision.key);
-}
-
 export async function shouldSendSlackAlert(decision: RateLimitDecision): Promise<boolean> {
   const result = await redis.set(decision.key + ':alert', '1', 'PX', HOUR_MS, 'NX');
   return result === 'OK';
-}
-
-export async function clearSlackAlert(decision: RateLimitDecision): Promise<void> {
-  await redis.del(decision.key + ':alert');
 }

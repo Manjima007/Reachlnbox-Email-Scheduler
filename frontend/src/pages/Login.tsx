@@ -14,7 +14,6 @@ export function Login({ config, onLogin, notify }: Props) {
   const [email, setEmail] = useState('demo@reachinbox.ai');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const oauthError = new URLSearchParams(window.location.search).get('error');
 
   async function devLogin(event: FormEvent) {
     event.preventDefault();
@@ -45,11 +44,6 @@ export function Login({ config, onLogin, notify }: Props) {
         <div className="card p-8">
           <h1 className="mb-1 text-2xl font-bold text-slate-900">Login</h1>
           <p className="mb-6 text-sm text-slate-500">Sign in to schedule, track and search your email sequences.</p>
-          {oauthError && (
-            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-              Google sign-in failed: {oauthError.replace(/_/g, ' ')}. Please try again.
-            </p>
-          )}
 
           <a
             href="/api/auth/google"

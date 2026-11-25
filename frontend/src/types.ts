@@ -98,8 +98,8 @@ export interface SchedulePayload {
 export interface ScheduleResponse {
   batchId: string;
   total: number;
-  startTime?: string;
-  delayMs?: number;
-  hourlyLimit?: number;
+  startTime: string;
+  delayMs: number;
+  hourlyLimit: number;
   duplicate?: boolean;
 }

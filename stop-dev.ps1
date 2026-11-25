@@ -5,7 +5,7 @@ $ErrorActionPreference = "Continue"
 
 # Find and stop our node processes (api/worker/vite) by their working directory / port
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object {
-  $_.CommandLine -match 'dist\\(server|worker)\.js|vite\.cmd|vite/dist'
+  $_.CommandLine -match 'dist[\\/](server|worker)\.js|vite\.cmd|vite[\\/]bin[\\/]vite\.js|vite[\\/]dist'
 } | ForEach-Object {
   Write-Host "[node]   stopping pid $($_.ProcessId)"
   Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue

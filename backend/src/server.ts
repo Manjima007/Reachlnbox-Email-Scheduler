@@ -10,14 +10,7 @@ import { env, googleConfigured, slackConfigured, DEV_LOGIN_ENABLED } from './env
 import { authRouter } from './routes/auth';
 import { emailsRouter } from './routes/emails';
 import { emailQueue, closeQueue, bullConnection, EMAIL_QUEUE_NAME, workerOptions } from './queue';
-import {
-  bootstrap,
-  processEmailJob,
-  startRecoveryLoop,
-  startWorkerHeartbeat,
-  stopRecoveryLoop,
-  stopWorkerHeartbeat,
-} from './worker';
+import { processEmailJob } from './worker';
 import { prisma, disconnectDb } from './db';
 import { redis } from './redis';
 
@@ -73,24 +66,19 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
 
 const server = app.listen(env.PORT, () => {
   console.log(`[api] listening on http://localhost:${env.PORT}`);
-  console.log(`[api] public URL: ${env.FRONTEND_URL}`);
   console.log(`[api] bull dashboard: http://localhost:${env.PORT}/admin/queues`);
 
   // Single-service deploy mode (free Render has no background-worker service
   // type): run the BullMQ worker in this same process. Set RUN_WORKER=true.
   // On multi-service deploys leave it unset so only the dedicated worker runs.
   if (process.env.RUN_WORKER === 'true') {
-    void bootstrap()
-      .catch((error) => console.error('[api] recovery failed:', error))
-      .finally(() => startInlineWorker());
+    startInlineWorker();
   }
 });
 
 let inlineWorker: Worker | null = null;
 
 function startInlineWorker() {
-  startWorkerHeartbeat();
-  startRecoveryLoop();
   inlineWorker = new Worker(EMAIL_QUEUE_NAME, processEmailJob, {
     connection: bullConnection,
     ...workerOptions(),
@@ -104,12 +92,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     console.log(`[api] ${signal} received, closing...`);
     server.close();
     await inlineWorker?.close();
-    stopRecoveryLoop();
-    try {
-      await stopWorkerHeartbeat();
-    } catch (error) {
-      console.error('[api] heartbeat cleanup failed:', error);
-    }
     await closeQueue();
     await disconnectDb();
     redis.disconnect();

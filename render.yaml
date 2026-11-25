@@ -34,14 +34,21 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      - key: JWT_SECRET
+      # <FILL> set to this API service's public URL once deployed
+      - key: FRONTEND_URL
+        value: https://reachinbox-api.onrender.com
+      - key: GOOGLE_CALLBACK_URL
+        value: https://reachinbox-api.onrender.com/api/auth/google/callback
+      - key: SLACK_REDIRECT_URI
+        value: https://reachinbox-api.onrender.com/api/auth/slack/callback
+      - key: SLACK_WEBHOOK_URL
         sync: false
+      - key: JWT_SECRET
+        value: dev-only-secret-change-me
       - key: DEV_LOGIN_ENABLED
-        value: "false"
+        value: "true"
       - key: ELASTICSEARCH_ENABLED
         value: "false"
       # Run the BullMQ worker inside the API process (single-service deploy).
       - key: RUN_WORKER
         value: "true"
-      - key: SEND_LOCK_TTL_MS
-        value: "120000"
